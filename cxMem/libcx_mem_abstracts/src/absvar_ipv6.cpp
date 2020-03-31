@@ -21,7 +21,7 @@ in6_addr AbsVar_IPV6::getValue()
 bool AbsVar_IPV6::setValue(const in6_addr &value)
 {
     Lock_Mutex_RW lock(mutex);
-    this->value.__in6_u = value.__in6_u;
+    this->value.__in6_union = value.__in6_union;
     return true;
 }
 

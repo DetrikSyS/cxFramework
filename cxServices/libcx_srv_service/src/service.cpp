@@ -5,6 +5,8 @@
 #include <signal.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 // STL:
 #include <iostream>
 #include <fstream>
@@ -20,7 +22,7 @@ static int lockfd = -1;
 
 static void daemonize();
 void pidCheck();
-void exitRoutine(int32_t d, void *);
+void exitRoutine(void);
 
 int main(int argc, char *argv[])
 {
@@ -28,18 +30,19 @@ int main(int argc, char *argv[])
     globalArgs.initProgramName(argv[0]);
 
     // Local default cmd options...
-    globalArgs.addCommandLineOption("Service Options", 'd', "daemon" , "Run as daemon."         , "0", ABSTRACT_BOOL );
-    globalArgs.addCommandLineOption("Other Options"  , 'v', "verbose", "Set verbosity level."   , "0", ABSTRACT_UINT8 );
-    globalArgs.addCommandLineOption("Other Options"  , 'h', "help"   , "Show information usage.", "0", ABSTRACT_BOOL  );
+    globalArgs.addCommandLineOption("Service Options", 'd', "daemon", "Run as daemon.", "0", ABSTRACT_BOOL);
+    globalArgs.addCommandLineOption("Other Options", 'v', "verbose", "Set verbosity level.", "0", ABSTRACT_UINT8);
+    globalArgs.addCommandLineOption("Other Options", 'h', "help", "Show information usage.", "0", ABSTRACT_BOOL);
 
     // Init vars...
-    _initvars(argc,argv, &globalArgs);
+    _initvars(argc, argv, &globalArgs);
     // Print program description:
     globalArgs.printProgramHeader();
     // Parse program options.
-    if (!globalArgs.parseCommandLineOptions(argc,argv))
+    if (!globalArgs.parseCommandLineOptions(argc, argv))
     {
-        cout << "ERR: Failed to Load CMD Line Parameters." << endl << flush;
+        cout << "ERR: Failed to Load CMD Line Parameters." << endl
+             << flush;
         return -2;
     }
 
@@ -51,29 +54,34 @@ int main(int argc, char *argv[])
     }
 
     // Load/Prepare the configuration based in command line arguments.
-    if (!_config(argc,argv,&globalArgs))
+    if (!_config(argc, argv, &globalArgs))
     {
-        cout << "ERR: Failed to Load Configuration." << endl << flush;
+        cout << "ERR: Failed to Load Configuration." << endl
+             << flush;
         return -1;
     }
 
     int r = 0;
     if (!globalArgs.getCommandLineOptionBooleanValue(globalArgs.getDefaultDaemonOption()))
     {
-        r = _start(argc,argv,&globalArgs);
+        r = _start(argc, argv, &globalArgs);
         if (!globalArgs.isInifiniteWaitAtEnd())
             return r;
         else
         {
-            cout << "> This program is running with background threads, press CTRL-C to exit..." << endl << flush;
-            for (;;) { sleep(3600); }
+            cout << "> This program is running with background threads, press CTRL-C to exit..." << endl
+                 << flush;
+            for (;;)
+            {
+                sleep(3600);
+            }
         }
     }
     else
     {
         // Initialize the logging interface
-        openlog( globalArgs.getDaemonName().c_str(), LOG_PID, LOG_LOCAL5);
-        syslog( LOG_INFO, "Initiating as service...");
+        openlog(globalArgs.getDaemonName().c_str(), LOG_PID, LOG_LOCAL5);
+        syslog(LOG_INFO, "Initiating as service...");
 
         // Daemonize:
         daemonize();
@@ -83,21 +91,34 @@ int main(int argc, char *argv[])
 
         // Allow this application to be killed and setup an exit routine.
         signal(SIGHUP, SIG_DFL);
-        on_exit(exitRoutine, nullptr);
+        
+        long a;
+        int d;
+        a = sysconf(_SC_ATEXIT_MAX);
+        printf("ATEXIT_MAX = %ld\n", a);
 
-        r = _start(argc,argv,&globalArgs);
+        d = atexit(exitRoutine);
+        if (d != 0)
+        {
+            fprintf(stderr, "Cannot set exit function\n");
+        }
+
+        r = _start(argc, argv, &globalArgs);
 
         if (!globalArgs.isInifiniteWaitAtEnd())
         {
             // Finish up.
-            syslog( LOG_NOTICE, "terminated (%d) by program execution", r);
+            syslog(LOG_NOTICE, "terminated (%d) by program execution", r);
             closelog();
             return r;
         }
         else
         {
-            syslog( LOG_NOTICE, "This program (%d) is running with background threads, send kill signal to terminate it.", getpid());
-            for (;;) { sleep(3600); }
+            syslog(LOG_NOTICE, "This program (%d) is running with background threads, send kill signal to terminate it.", getpid());
+            for (;;)
+            {
+                sleep(3600);
+            }
         }
     }
 }
@@ -107,12 +128,14 @@ static void child_handler(int signum)
     switch (signum)
     {
     case SIGALRM:
-        cerr << globalArgs.getDaemonName() << " child handler: SIGALRM" << endl << flush;
+        cerr << globalArgs.getDaemonName() << " child handler: SIGALRM" << endl
+             << flush;
         _exit(EXIT_FAILURE);
     case SIGUSR1:
         _exit(EXIT_SUCCESS);
     case SIGCHLD:
-        cerr << globalArgs.getDaemonName() << " child handler: SIGCHLD" << endl << flush;
+        cerr << globalArgs.getDaemonName() << " child handler: SIGCHLD" << endl
+             << flush;
         _exit(EXIT_FAILURE);
     }
 }
@@ -147,7 +170,7 @@ static int get_lock()
 static void free_lock(void)
 {
     if (lockfd >= 0)
-        (void) close(lockfd);
+        (void)close(lockfd);
 }
 
 static void daemonize()
@@ -167,7 +190,7 @@ static void daemonize()
     pid = fork();
     if (pid < 0)
     {
-        syslog( LOG_ERR, "unable to fork daemon, code=%d [%s]", errno, strerror(errno));
+        syslog(LOG_ERR, "unable to fork daemon, code=%d [%s]", errno, strerror(errno));
         _exit(EXIT_FAILURE);
     }
 
@@ -197,7 +220,7 @@ static void daemonize()
     sid = setsid();
     if (sid < 0)
     {
-        syslog( LOG_ERR, "unable to create a new session, code %d (%s)", errno, strerror(errno));
+        syslog(LOG_ERR, "unable to create a new session, code %d (%s)", errno, strerror(errno));
         _exit(EXIT_FAILURE);
     }
 
@@ -208,11 +231,13 @@ static void daemonize()
     if (get_lock() == 0)
     {
         if (getuid() == 0)
-            cerr << "ERR: " << globalArgs.getDaemonName() << " already running..." << endl << flush;
+            cerr << "ERR: " << globalArgs.getDaemonName() << " already running..." << endl
+                 << flush;
         else
-            cerr << "ERR: " << globalArgs.getDaemonName() << " insufficient privileges (uid=0 required, running as: " <<  getuid() << ")..." << endl << flush;
+            cerr << "ERR: " << globalArgs.getDaemonName() << " insufficient privileges (uid=0 required, running as: " << getuid() << ")..." << endl
+                 << flush;
         fflush(stdout);
-        syslog( LOG_ERR, "unable to create lock file.");
+        syslog(LOG_ERR, "unable to create lock file.");
         _exit(EXIT_FAILURE);
     }
 
@@ -229,8 +254,8 @@ static void daemonize()
     string logFile_err = "/var/log/" + globalArgs.getDaemonName() + "/err.log";
 
     freopen("/dev/null", "r", stdin);
-    freopen( logFile_out.c_str(), "w", stdout);
-    freopen( logFile_err.c_str(), "w", stderr);
+    freopen(logFile_out.c_str(), "w", stdout);
+    freopen(logFile_err.c_str(), "w", stderr);
 }
 
 void pidCheck()
@@ -247,13 +272,12 @@ void pidCheck()
     runFile.close();
 }
 
-void exitRoutine(int32_t d, void *)
+void exitRoutine(void)
 {
     string pidFile = "/var/run/" + globalArgs.getDaemonName() + ".pid";
 
-    fprintf(stderr, "Finalizing (%s) (%d) - pid %d.\n", globalArgs.getDaemonName().c_str(), d, getpid());
+    fprintf(stderr, "Finalizing (%s) - pid %d.\n", globalArgs.getDaemonName().c_str(), getpid());
     fflush(stdout);
     remove(pidFile.c_str());
     free_lock();
 }
-

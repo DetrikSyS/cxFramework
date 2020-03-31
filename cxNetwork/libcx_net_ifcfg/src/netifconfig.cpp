@@ -9,7 +9,7 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <netinet/if_ether.h> /* includes net/ethernet.h */
+#include <linux/if_ether.h> /* includes net/ethernet.h */
 
 
 NetIfConfig::NetIfConfig()
